@@ -87,9 +87,20 @@ ansible-playbook ansible/playbooks/setup-argocd.yml
 | ArgoCD | `https://argo.webtechforge.dev` |
 | Longhorn UI | `https://lh.webtechforge.dev` |
 
-Все сервисы защищены Cloudflare Access (Google OAuth, `s.tsepeniuk@webtechforge.dev`). Bypass для health-эндпоинтов и webhooks.
+Все сервисы защищены Cloudflare Access (Google OAuth, `s.tsepeniuk@webtechforge.dev`).
 
-Для добавления нового сервиса: создать Ingress с `host: <sub>.webtechforge.dev` + добавить hostname в CF tunnel config + Access Application.
+Bypass (path-based, без OAuth):
+- `gf.webtechforge.dev/api/health`
+- `prom.webtechforge.dev/-/healthy`
+- `argo.webtechforge.dev/api/webhook`
+
+**Добавление нового сервиса:**
+1. Создать Ingress с `host: <sub>.webtechforge.dev`
+2. Добавить hostname в CF tunnel config (API или Dashboard)
+3. Создать DNS CNAME `<sub>` → `<tunnel-id>.cfargotunnel.com` (proxied)
+4. Создать Access Application с allow policy
+
+Секреты для Cloudflare API: `.secrets/cloudflare` (API token, account/zone/tunnel ID).
 
 ## ArgoCD GitOps
 

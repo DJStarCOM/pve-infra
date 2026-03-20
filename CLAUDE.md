@@ -46,6 +46,11 @@ ansible-playbook ansible/playbooks/setup-cloudflare-tunnel.yml
 ansible-playbook ansible/playbooks/setup-argocd.yml
 ```
 
+## Cloudflare
+
+Секреты для CF API: `.secrets/cloudflare` (CLOUDFLARE_API_TOKEN, ACCOUNT_ID, ZONE_ID, TUNNEL_ID).
+Tunnel name: `k3s-pve`. Все сервисы через Cloudflare Access (Google OAuth).
+
 ## ArgoCD GitOps
 
 App of Apps: корневой `root` следит за `argocd/apps/`, auto-sync + selfHeal + prune.
