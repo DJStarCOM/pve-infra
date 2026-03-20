@@ -85,6 +85,7 @@ ansible-playbook ansible/playbooks/setup-argocd.yml
 | Grafana | `https://gf.webtechforge.dev` (admin/admin) |
 | Prometheus | `https://prom.webtechforge.dev` |
 | ArgoCD | `https://argo.webtechforge.dev` |
+| Longhorn UI | `https://lh.webtechforge.dev` |
 
 Все сервисы защищены Cloudflare Access (Google OAuth, `s.tsepeniuk@webtechforge.dev`). Bypass для health-эндпоинтов и webhooks.
 

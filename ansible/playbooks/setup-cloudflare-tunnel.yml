@@ -9,6 +9,7 @@
 #   gf.webtechforge.dev   → http://traefik.traefik.svc.cluster.local:80
 #   prom.webtechforge.dev → http://traefik.traefik.svc.cluster.local:80
 #   argo.webtechforge.dev → http://traefik.traefik.svc.cluster.local:80
+#   lh.webtechforge.dev   → http://traefik.traefik.svc.cluster.local:80
 #   (или wildcard: *.webtechforge.dev → http://traefik.traefik.svc.cluster.local:80)
 #
 # Запуск: ansible-playbook ansible/playbooks/setup-cloudflare-tunnel.yml
@@ -184,6 +185,29 @@
                           number: 80
         EOF
 
+    - name: "Ingress: Longhorn UI (lh.{{ domain }})"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: longhorn
+          namespace: longhorn-system
+        spec:
+          ingressClassName: traefik
+          rules:
+            - host: lh.{{ domain }}
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: longhorn-frontend
+                        port:
+                          number: 80
+        EOF
+
     # === Итог ===
 
     - name: Вывести итоговый статус
@@ -205,6 +229,7 @@
             gf.{{ domain }}   → http://traefik.traefik.svc.cluster.local:80
             prom.{{ domain }} → http://traefik.traefik.svc.cluster.local:80
             argo.{{ domain }} → http://traefik.traefik.svc.cluster.local:80
+            lh.{{ domain }}   → http://traefik.traefik.svc.cluster.local:80
 
           Или wildcard: *.{{ domain }} → http://traefik.traefik.svc.cluster.local:80
 
@@ -212,3 +237,4 @@
             https://gf.{{ domain }}     — Grafana (admin/admin)
             https://prom.{{ domain }}   — Prometheus
             https://argo.{{ domain }}   — ArgoCD
+            https://lh.{{ domain }}     — Longhorn UI
