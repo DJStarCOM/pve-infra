@@ -78,6 +78,10 @@ ansible-playbook ansible/playbooks/setup-k3s-extras.yml
 
 # Фаза 6: Cloudflare Tunnel + Ingress (запросит tunnel token)
 ansible-playbook ansible/playbooks/setup-cloudflare-tunnel.yml
+
+# Фаза 7: Настроить ArgoCD GitOps (deploy key + webhook + App of Apps)
+ansible-playbook ansible/playbooks/setup-argocd.yml
+# После: добавить deploy key и webhook в GitHub (инструкции в выводе плейбука)
 ```
 
 ### Внешний доступ (через Cloudflare Tunnel)
@@ -91,6 +95,24 @@ ansible-playbook ansible/playbooks/setup-cloudflare-tunnel.yml
 Все сервисы защищены Cloudflare Access (Google OAuth, `s.tsepeniuk@webtechforge.dev`). Bypass для health-эндпоинтов и webhooks.
 
 Для добавления нового сервиса: создать Ingress с `host: <sub>.webtechforge.dev` + добавить hostname в CF tunnel config + Access Application.
+
+### ArgoCD GitOps
+
+Паттерн **App of Apps**: корневой Application `root` следит за `argocd/apps/` и автоматически применяет все Application-манифесты оттуда.
+
+```
+argocd/
+  projects/       # AppProject (infra, apps)
+  apps/           # Application-манифесты (подхватываются root app)
+  templates/      # Шаблоны (НЕ подхватываются ArgoCD)
+```
+
+**Добавление нового приложения:**
+1. Скопировать `argocd/templates/app-example.yml` в `argocd/apps/<name>.yml`
+2. Заполнить repoURL, path, namespace
+3. Закоммитить в main — ArgoCD подхватит автоматически
+
+**Webhook:** GitHub push → `https://argo.webtechforge.dev/api/webhook` → мгновенная синхронизация.
 
 ### Доступ через port-forward (без туннеля)
 

@@ -1,0 +1,165 @@
+---
+# Настройка ArgoCD GitOps: deploy key, webhook, App of Apps
+#
+# Запуск: ansible-playbook ansible/playbooks/setup-argocd.yml
+#
+# После выполнения нужно вручную:
+# 1. Добавить deploy key в GitHub: Settings > Deploy Keys (read-only)
+# 2. Добавить webhook: Settings > Webhooks
+#    URL: https://argo.webtechforge.dev/api/webhook
+#    Content type: application/json
+#    Secret: <из вывода плейбука>
+#    Events: Just the push event
+
+- name: Настроить ArgoCD GitOps
+  hosts: k3s_master
+  become: true
+  gather_facts: false
+
+  vars:
+    argocd_namespace: argocd
+    repo_url: "git@github.com:DJStarCOM/pve-infra.git"
+    deploy_key_path: /root/.ssh/argocd_deploy_key
+
+  tasks:
+    # --- SSH Deploy Key ---
+    - name: "Deploy Key: Проверить наличие"
+      ansible.builtin.stat:
+        path: "{{ deploy_key_path }}"
+      register: deploy_key_stat
+
+    - name: "Deploy Key: Сгенерировать ed25519"
+      ansible.builtin.command:
+        cmd: ssh-keygen -t ed25519 -f {{ deploy_key_path }} -N "" -C "argocd@pve-infra"
+      when: not deploy_key_stat.stat.exists
+
+    - name: "Deploy Key: Прочитать публичный ключ"
+      ansible.builtin.slurp:
+        src: "{{ deploy_key_path }}.pub"
+      register: deploy_key_pub
+
+    - name: "Deploy Key: Прочитать приватный ключ"
+      ansible.builtin.slurp:
+        src: "{{ deploy_key_path }}"
+      register: deploy_key_private
+
+    # --- Repository Secret ---
+    - name: "Repo Secret: Удалить старый (если есть)"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ argocd_namespace }} delete secret repo-pve-infra --ignore-not-found
+
+    - name: "Repo Secret: Записать приватный ключ во временный файл"
+      ansible.builtin.copy:
+        content: "{{ deploy_key_private.content | b64decode }}"
+        dest: /tmp/argocd_deploy_key
+        mode: "0600"
+
+    - name: "Repo Secret: Создать из файла"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ argocd_namespace }} create secret generic repo-pve-infra \
+          --from-literal=type=git \
+          --from-literal=url={{ repo_url }} \
+          --from-file=sshPrivateKey=/tmp/argocd_deploy_key \
+          --from-literal=insecure=false
+      register: repo_secret
+
+    - name: "Repo Secret: Добавить label"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ argocd_namespace }} label secret repo-pve-infra \
+          argocd.argoproj.io/secret-type=repository --overwrite
+
+    - name: "Repo Secret: Удалить временный файл"
+      ansible.builtin.file:
+        path: /tmp/argocd_deploy_key
+        state: absent
+
+    # --- Webhook Secret ---
+    - name: "Webhook: Сгенерировать секрет"
+      ansible.builtin.shell: |
+        openssl rand -hex 32
+      register: webhook_secret
+      changed_when: false
+
+    - name: "Webhook: Пропатчить argocd-secret"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ argocd_namespace }} patch secret argocd-secret \
+          --type merge \
+          -p '{"stringData":{"webhook.github.secret":"{{ webhook_secret.stdout }}"}}'
+
+    # --- AppProject + Applications ---
+    - name: "Projects: Применить AppProject infra"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        {{ lookup('file', playbook_dir + '/../../argocd/projects/infra.yml') }}
+        EOF
+
+    - name: "Projects: Применить AppProject apps"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        {{ lookup('file', playbook_dir + '/../../argocd/projects/apps.yml') }}
+        EOF
+
+    - name: "Root App: Создать App of Apps"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        {{ lookup('file', playbook_dir + '/../../argocd/apps/root.yml') }}
+        EOF
+
+    - name: "Root App: Дождаться синхронизации (до 120с)"
+      ansible.builtin.shell: |
+        for i in $(seq 1 12); do
+          STATUS=$(k3s kubectl -n {{ argocd_namespace }} get app root -o jsonpath='{.status.sync.status}' 2>/dev/null)
+          HEALTH=$(k3s kubectl -n {{ argocd_namespace }} get app root -o jsonpath='{.status.health.status}' 2>/dev/null)
+          echo "Attempt $i: sync=$STATUS health=$HEALTH"
+          if [ "$STATUS" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
+            echo "OK"
+            exit 0
+          fi
+          sleep 10
+        done
+        echo "WARNING: root app not yet synced, check ArgoCD UI"
+        exit 0
+
+    # --- Итоговый вывод ---
+    - name: "Статус: Applications"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ argocd_namespace }} get applications
+      register: apps_status
+      changed_when: false
+
+    - name: "Статус: AppProjects"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ argocd_namespace }} get appproject
+      register: projects_status
+      changed_when: false
+
+    - name: Вывести инструкции
+      ansible.builtin.debug:
+        msg:
+          - "============================================"
+          - "ArgoCD GitOps настроен!"
+          - "============================================"
+          - ""
+          - "=== AppProjects ==="
+          - "{{ projects_status.stdout }}"
+          - ""
+          - "=== Applications ==="
+          - "{{ apps_status.stdout }}"
+          - ""
+          - "=== ДЕЙСТВИЯ (вручную) ==="
+          - ""
+          - "1. Добавьте Deploy Key в GitHub:"
+          - "   Repo: DJStarCOM/pve-infra > Settings > Deploy Keys"
+          - "   Title: argocd-pve-infra"
+          - "   Key (read-only):"
+          - "   {{ deploy_key_pub.content | b64decode }}"
+          - ""
+          - "2. Добавьте Webhook в GitHub:"
+          - "   Repo: DJStarCOM/pve-infra > Settings > Webhooks"
+          - "   URL: https://argo.webtechforge.dev/api/webhook"
+          - "   Content type: application/json"
+          - "   Secret: {{ webhook_secret.stdout }}"
+          - "   Events: Just the push event"
+          - ""
+          - "3. Проверьте: https://argo.webtechforge.dev"
+          - "============================================"

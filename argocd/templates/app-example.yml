@@ -1,0 +1,26 @@
+# Шаблон для нового приложения в ArgoCD
+# Скопируйте этот файл в argocd/apps/<app-name>.yml и измените значения.
+# После коммита в main ArgoCD подхватит его автоматически через App of Apps.
+#
+# ВАЖНО: файлы в templates/ НЕ подхватываются ArgoCD.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: <app-name>
+  namespace: argocd
+spec:
+  project: apps
+  source:
+    repoURL: git@github.com:DJStarCOM/<repo-name>.git
+    targetRevision: main
+    path: k8s  # путь к манифестам в репозитории
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: <app-namespace>
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
