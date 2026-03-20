@@ -45,6 +45,11 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: platform
+  ignoreDifferences:
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /status
   syncPolicy:
     automated:
       selfHeal: true
