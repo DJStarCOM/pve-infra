@@ -1,0 +1,124 @@
+---
+# Установка инфраструктурных компонентов в k3s-кластер:
+# - Longhorn (distributed storage)
+# - Traefik (ingress controller)
+# - ArgoCD (GitOps)
+#
+# Запуск: ansible-playbook ansible/playbooks/setup-k3s-infra.yml
+- name: Установить инфраструктуру в k3s
+  hosts: k3s_master
+  become: true
+  gather_facts: false
+
+  vars:
+    longhorn_version: "v1.8.1"
+    traefik_version: "v2.11"
+    argocd_version: "v2.14.11"
+
+  tasks:
+    # --- Longhorn ---
+    - name: "Longhorn: Установить"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/{{ longhorn_version }}/deploy/longhorn.yaml
+      register: longhorn_install
+      changed_when: "'created' in longhorn_install.stdout"
+
+    - name: "Longhorn: Дождаться готовности"
+      ansible.builtin.shell: |
+        k3s kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=180s
+      retries: 3
+      delay: 10
+      register: longhorn_ready
+      until: longhorn_ready.rc == 0
+
+    - name: "Longhorn: Сделать default StorageClass"
+      ansible.builtin.shell: |
+        k3s kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+        k3s kubectl patch storageclass longhorn -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+      changed_when: true
+
+    # --- Traefik ---
+    - name: "Traefik: Создать namespace"
+      ansible.builtin.shell: |
+        k3s kubectl create namespace traefik --dry-run=client -o yaml | k3s kubectl apply -f -
+
+    - name: "Traefik: Установить через Helm"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        apiVersion: helm.cattle.io/v1
+        kind: HelmChart
+        metadata:
+          name: traefik
+          namespace: kube-system
+        spec:
+          repo: https://traefik.github.io/charts
+          chart: traefik
+          targetNamespace: traefik
+          valuesContent: |-
+            deployment:
+              replicas: 1
+            service:
+              type: NodePort
+            ports:
+              web:
+                nodePort: 30080
+              websecure:
+                nodePort: 30443
+            ingressRoute:
+              dashboard:
+                enabled: true
+                matchRule: PathPrefix(`/dashboard`) || PathPrefix(`/api`)
+                entryPoints:
+                  - web
+        EOF
+      changed_when: true
+
+    - name: "Traefik: Дождаться готовности"
+      ansible.builtin.shell: |
+        k3s kubectl -n traefik rollout status deploy/traefik --timeout=120s
+      retries: 6
+      delay: 10
+      register: traefik_ready
+      until: traefik_ready.rc == 0
+
+    # --- ArgoCD ---
+    - name: "ArgoCD: Создать namespace"
+      ansible.builtin.shell: |
+        k3s kubectl create namespace argocd --dry-run=client -o yaml | k3s kubectl apply -f -
+
+    - name: "ArgoCD: Установить"
+      ansible.builtin.shell: |
+        k3s kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml
+      register: argocd_install
+      changed_when: "'created' in argocd_install.stdout"
+
+    - name: "ArgoCD: Дождаться готовности"
+      ansible.builtin.shell: |
+        k3s kubectl -n argocd rollout status deploy/argocd-server --timeout=180s
+      retries: 6
+      delay: 10
+      register: argocd_ready
+      until: argocd_ready.rc == 0
+
+    - name: "ArgoCD: Получить initial admin password"
+      ansible.builtin.shell: |
+        k3s kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+      register: argocd_password
+      changed_when: false
+
+    - name: "ArgoCD: Вывести пароль"
+      ansible.builtin.debug:
+        msg: "ArgoCD admin password: {{ argocd_password.stdout }}"
+
+    # --- Итог ---
+    - name: Вывести итоговый статус
+      ansible.builtin.shell: |
+        echo "=== NODES ===" && k3s kubectl get nodes -o wide && \
+        echo "=== STORAGE CLASSES ===" && k3s kubectl get sc && \
+        echo "=== ALL PODS ===" && k3s kubectl get pods -A
+      register: final_status
+      changed_when: false
+
+    - name: Итоговый статус
+      ansible.builtin.debug:
+        msg: "{{ final_status.stdout_lines }}"

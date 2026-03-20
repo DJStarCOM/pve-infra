@@ -1,0 +1,74 @@
+---
+# Базовая настройка VM перед установкой k3s
+# Запуск: ansible-playbook -i inventory/hosts.yml playbooks/setup-nodes.yml
+- name: Базовая настройка k3s-нод
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Обновить пакеты
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Установить базовые пакеты
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - gnupg
+          - apt-transport-https
+          - ca-certificates
+          - open-iscsi
+          - nfs-common
+          - jq
+        state: present
+
+    - name: Включить и запустить iscsid (для Longhorn)
+      ansible.builtin.systemd:
+        name: iscsid
+        enabled: true
+        state: started
+
+    - name: Настроить timezone
+      community.general.timezone:
+        name: UTC
+
+    - name: Отключить swap
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+
+    - name: Убрать swap из fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '\sswap\s'
+        state: absent
+
+    - name: Загрузить необходимые модули ядра
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - br_netfilter
+        - overlay
+
+    - name: Модули ядра при загрузке
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k3s.conf
+        content: |
+          br_netfilter
+          overlay
+        mode: "0644"
+
+    - name: Sysctl параметры для k8s
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-k3s.conf
+        reload: true
+      loop:
+        - { key: net.bridge.bridge-nf-call-iptables, value: "1" }
+        - { key: net.bridge.bridge-nf-call-ip6tables, value: "1" }
+        - { key: net.ipv4.ip_forward, value: "1" }

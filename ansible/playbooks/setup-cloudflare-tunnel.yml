@@ -1,0 +1,214 @@
+---
+# Установка Cloudflare Tunnel для доступа к сервисам кластера через webtechforge.dev
+#
+# Перед запуском:
+# 1. Cloudflare Dashboard → Zero Trust → Networks → Tunnels → Create a tunnel
+# 2. Скопировать tunnel token
+#
+# После запуска — добавить Public Hostnames в CF Dashboard:
+#   gf.webtechforge.dev   → http://traefik.traefik.svc.cluster.local:80
+#   prom.webtechforge.dev → http://traefik.traefik.svc.cluster.local:80
+#   argo.webtechforge.dev → http://traefik.traefik.svc.cluster.local:80
+#   (или wildcard: *.webtechforge.dev → http://traefik.traefik.svc.cluster.local:80)
+#
+# Запуск: ansible-playbook ansible/playbooks/setup-cloudflare-tunnel.yml
+- name: Установить Cloudflare Tunnel в k3s
+  hosts: k3s_master
+  become: true
+  gather_facts: false
+
+  vars_prompt:
+    - name: cloudflare_tunnel_token
+      prompt: "Cloudflare Tunnel token"
+      private: true
+
+  vars:
+    domain: "webtechforge.dev"
+
+  tasks:
+    # === cloudflared ===
+
+    - name: "Cloudflared: Создать namespace"
+      ansible.builtin.shell: |
+        k3s kubectl create namespace cloudflare --dry-run=client -o yaml | k3s kubectl apply -f -
+
+    - name: "Cloudflared: Создать Secret с токеном"
+      ansible.builtin.shell: |
+        k3s kubectl -n cloudflare create secret generic cloudflare-tunnel-token \
+          --from-literal=token="{{ cloudflare_tunnel_token }}" \
+          --dry-run=client -o yaml | k3s kubectl apply -f -
+      no_log: true
+
+    - name: "Cloudflared: Развернуть Deployment"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: cloudflared
+          namespace: cloudflare
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: cloudflared
+          template:
+            metadata:
+              labels:
+                app: cloudflared
+            spec:
+              containers:
+                - name: cloudflared
+                  image: cloudflare/cloudflared:latest
+                  args:
+                    - tunnel
+                    - --no-autoupdate
+                    - run
+                    - --token
+                    - $(TUNNEL_TOKEN)
+                  env:
+                    - name: TUNNEL_TOKEN
+                      valueFrom:
+                        secretKeyRef:
+                          name: cloudflare-tunnel-token
+                          key: token
+                  resources:
+                    requests:
+                      cpu: 25m
+                      memory: 64Mi
+                    limits:
+                      cpu: 100m
+                      memory: 128Mi
+        EOF
+      changed_when: true
+
+    - name: "Cloudflared: Дождаться готовности"
+      ansible.builtin.shell: |
+        k3s kubectl -n cloudflare rollout status deploy/cloudflared --timeout=120s
+      retries: 4
+      delay: 15
+      register: cloudflared_ready
+      until: cloudflared_ready.rc == 0
+
+    # === ArgoCD: включить HTTP-режим для работы через ingress ===
+
+    - name: "ArgoCD: Включить HTTP-режим (insecure)"
+      ansible.builtin.shell: |
+        k3s kubectl -n argocd get configmap argocd-cmd-params-cm >/dev/null 2>&1 || \
+          k3s kubectl -n argocd create configmap argocd-cmd-params-cm
+        k3s kubectl -n argocd patch configmap argocd-cmd-params-cm \
+          --type merge -p '{"data":{"server.insecure":"true"}}'
+      changed_when: true
+
+    - name: "ArgoCD: Перезапустить для применения HTTP-режима"
+      ansible.builtin.shell: |
+        k3s kubectl -n argocd rollout restart deploy/argocd-server
+      changed_when: true
+
+    - name: "ArgoCD: Дождаться готовности"
+      ansible.builtin.shell: |
+        k3s kubectl -n argocd rollout status deploy/argocd-server --timeout=180s
+      retries: 4
+      delay: 10
+      register: argocd_ready
+      until: argocd_ready.rc == 0
+
+    # === Ingress ресурсы (роутинг через Traefik) ===
+
+    - name: "Ingress: Grafana (gf.{{ domain }})"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: grafana
+          namespace: monitoring
+        spec:
+          ingressClassName: traefik
+          rules:
+            - host: gf.{{ domain }}
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: kube-prometheus-stack-grafana
+                        port:
+                          number: 80
+        EOF
+
+    - name: "Ingress: Prometheus (prom.{{ domain }})"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: prometheus
+          namespace: monitoring
+        spec:
+          ingressClassName: traefik
+          rules:
+            - host: prom.{{ domain }}
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: kube-prometheus-stack-prometheus
+                        port:
+                          number: 9090
+        EOF
+
+    - name: "Ingress: ArgoCD (argo.{{ domain }})"
+      ansible.builtin.shell: |
+        k3s kubectl apply -f - <<'EOF'
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: argocd
+          namespace: argocd
+        spec:
+          ingressClassName: traefik
+          rules:
+            - host: argo.{{ domain }}
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: argocd-server
+                        port:
+                          number: 80
+        EOF
+
+    # === Итог ===
+
+    - name: Вывести итоговый статус
+      ansible.builtin.shell: |
+        echo "=== CLOUDFLARED ===" && k3s kubectl get pods -n cloudflare && \
+        echo "=== INGRESS ===" && k3s kubectl get ingress -A
+      register: final_status
+      changed_when: false
+
+    - name: Итоговый статус
+      ansible.builtin.debug:
+        msg: "{{ final_status.stdout_lines }}"
+
+    - name: Инструкции по настройке CF Dashboard
+      ansible.builtin.debug:
+        msg: |
+          Добавьте Public Hostnames в Cloudflare Dashboard (Tunnel → Configure):
+
+            gf.{{ domain }}   → http://traefik.traefik.svc.cluster.local:80
+            prom.{{ domain }} → http://traefik.traefik.svc.cluster.local:80
+            argo.{{ domain }} → http://traefik.traefik.svc.cluster.local:80
+
+          Или wildcard: *.{{ domain }} → http://traefik.traefik.svc.cluster.local:80
+
+          После этого сервисы будут доступны:
+            https://gf.{{ domain }}     — Grafana (admin/admin)
+            https://prom.{{ domain }}   — Prometheus
+            https://argo.{{ domain }}   — ArgoCD

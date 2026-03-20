@@ -1,0 +1,28 @@
+all:
+  vars:
+    ansible_user: ubuntu
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+
+  children:
+    pve:
+      hosts:
+        proxmox:
+          ansible_host: 57.128.231.223
+          ansible_user: root
+
+    k3s_master:
+      hosts:
+        k3s-master:
+          ansible_host: 10.0.1.10
+
+    k3s_workers:
+      hosts:
+        k3s-worker-1:
+          ansible_host: 10.0.1.11
+        k3s-worker-2:
+          ansible_host: 10.0.1.12
+
+    k3s_cluster:
+      children:
+        k3s_master:
+        k3s_workers:

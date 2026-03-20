@@ -1,0 +1,27 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfvars
+terraform/.terraform.lock.hcl
+
+# Ansible
+ansible/*.retry
+ansible/inventory/hosts.yml
+
+# Secrets
+*.pem
+*.key
+id_rsa*
+*.secret
+.env
+.secrets/
+kubeconfig.yaml
+
+# OS
+.DS_Store
+*.swp
+
+# IDE
+.idea/
+.vscode/

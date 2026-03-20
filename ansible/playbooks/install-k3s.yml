@@ -1,0 +1,81 @@
+---
+# Установка k3s кластера: master + workers
+# Запуск: ansible-playbook -i inventory/hosts.yml playbooks/install-k3s.yml
+- name: Установить k3s server (master)
+  hosts: k3s_master
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Установить k3s server
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server \
+          --disable traefik \
+          --disable servicelb \
+          --write-kubeconfig-mode 644 \
+          --tls-san {{ ansible_host }} \
+          --node-ip {{ ansible_host }} \
+          --cluster-init" sh -
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Дождаться готовности k3s
+      ansible.builtin.command: k3s kubectl get nodes
+      register: k3s_ready
+      retries: 10
+      delay: 5
+      until: k3s_ready.rc == 0
+      changed_when: false
+
+    - name: Получить join token
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_token
+
+    - name: Сохранить token как факт
+      ansible.builtin.set_fact:
+        k3s_join_token: "{{ k3s_token.content | b64decode | trim }}"
+
+    - name: Получить kubeconfig
+      ansible.builtin.slurp:
+        src: /etc/rancher/k3s/k3s.yaml
+      register: k3s_kubeconfig
+
+    - name: Сохранить kubeconfig локально
+      ansible.builtin.copy:
+        content: "{{ k3s_kubeconfig.content | b64decode | replace('127.0.0.1', ansible_host) }}"
+        dest: "{{ playbook_dir }}/../../kubeconfig.yaml"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+- name: Установить k3s agent (workers)
+  hosts: k3s_workers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Получить token от master
+      ansible.builtin.set_fact:
+        k3s_join_token: "{{ hostvars[groups['k3s_master'][0]].k3s_join_token }}"
+        k3s_master_ip: "{{ hostvars[groups['k3s_master'][0]].ansible_host }}"
+
+    - name: Установить k3s agent
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | K3S_URL=https://{{ k3s_master_ip }}:6443 \
+          K3S_TOKEN={{ k3s_join_token }} \
+          INSTALL_K3S_EXEC="agent --node-ip {{ ansible_host }}" sh -
+      args:
+        creates: /usr/local/bin/k3s-agent
+
+    - name: Дождаться регистрации агента
+      ansible.builtin.command: >
+        k3s kubectl --server https://{{ k3s_master_ip }}:6443
+        --token {{ k3s_join_token }}
+        get node {{ ansible_hostname }}
+      register: agent_ready
+      retries: 10
+      delay: 5
+      until: agent_ready.rc == 0
+      changed_when: false
+      failed_when: false
