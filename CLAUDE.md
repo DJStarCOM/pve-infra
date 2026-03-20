@@ -44,6 +44,9 @@ ansible-playbook ansible/playbooks/setup-cloudflare-tunnel.yml
 
 # Фаза 7: ArgoCD GitOps (deploy key + webhook + App of Apps)
 ansible-playbook ansible/playbooks/setup-argocd.yml
+
+# Фаза 8: Open WebUI (сначала создать .secrets/openai!)
+ansible-playbook ansible/playbooks/setup-open-webui.yml
 ```
 
 ## Cloudflare
@@ -54,6 +57,7 @@ Tunnel name: `k3s-pve`. Все сервисы через Cloudflare Access (Goog
 ## ArgoCD GitOps
 
 App of Apps: корневой `root` следит за `argocd/apps/`, auto-sync + selfHeal + prune.
+Системные приложения: `system-apps` следит за `argocd/system-apps/` (Helm charts и т.п.).
 
 Добавить приложение: скопировать `argocd/templates/app-example.yml` → `argocd/apps/<name>.yml`, заполнить, закоммитить в main.
 

@@ -7,6 +7,7 @@ spec:
   description: Infrastructure components managed by pve-infra repo
   sourceRepos:
     - "git@github.com:DJStarCOM/pve-infra.git"
+    - "https://helm.openwebui.com/"
   destinations:
     - namespace: "*"
       server: https://kubernetes.default.svc

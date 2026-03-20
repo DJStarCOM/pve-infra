@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: open-webui
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: infra
+  source:
+    chart: open-webui
+    repoURL: https://helm.openwebui.com/
+    targetRevision: "12.10.0"
+    helm:
+      valuesObject:
+        ollama:
+          enabled: false
+        pipelines:
+          enabled: false
+        tika:
+          enabled: false
+        openaiApiKey: ""
+        persistence:
+          enabled: true
+          size: 5Gi
+        ingress:
+          enabled: true
+          class: traefik
+          host: ai.webtechforge.dev
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        extraEnvVars:
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: open-webui-secrets
+                key: OPENAI_API_KEY
+          - name: OPENAI_API_BASE_URL
+            value: "https://llm.justysoft.com:443/v1"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true

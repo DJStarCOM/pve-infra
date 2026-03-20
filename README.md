@@ -50,6 +50,7 @@ IaC-репозиторий для управления Proxmox VE 8.4.17 инф�
 | cert-manager | cert-manager | v1.17.2 | TLS-сертификаты (Let's Encrypt) |
 | kube-prometheus-stack | monitoring | Helm chart 69.8.0 | Мониторинг (Prometheus + Grafana + Alertmanager) |
 | Cloudflare Tunnel | cloudflare | cloudflared latest | Внешний доступ к сервисам через webtechforge.dev |
+| Open WebUI | platform | v0.8.10 (Helm 12.10.0) | AI-чат интерфейс (OpenAI, Anthropic) |
 
 ## Развёртывание
 
@@ -76,6 +77,11 @@ ansible-playbook ansible/playbooks/setup-cloudflare-tunnel.yml
 # Фаза 7: Настроить ArgoCD GitOps (deploy key + webhook + App of Apps)
 ansible-playbook ansible/playbooks/setup-argocd.yml
 # После: добавить deploy key и webhook в GitHub (инструкции в выводе плейбука)
+
+# Фаза 8: Open WebUI (AI-чат интерфейс)
+# Сначала: echo 'OPENAI_API_KEY=sk-...' > .secrets/openai
+ansible-playbook ansible/playbooks/setup-open-webui.yml
+# После: git push → ArgoCD задеплоит, первый пользователь = админ
 ```
 
 ## Внешний доступ (через Cloudflare Tunnel)
@@ -86,6 +92,7 @@ ansible-playbook ansible/playbooks/setup-argocd.yml
 | Prometheus | `https://prom.webtechforge.dev` |
 | ArgoCD | `https://argo.webtechforge.dev` |
 | Longhorn UI | `https://lh.webtechforge.dev` |
+| Open WebUI | `https://ai.webtechforge.dev` |
 
 Все сервисы защищены Cloudflare Access (Google OAuth, `s.tsepeniuk@webtechforge.dev`).
 
@@ -110,6 +117,7 @@ Bypass (path-based, без OAuth):
 argocd/
   projects/       # AppProject (infra, apps)
   apps/           # Application-манифесты (подхватываются root app)
+  system-apps/    # Системные приложения — Helm charts (подхватываются system-apps app)
   templates/      # Шаблоны (НЕ подхватываются ArgoCD)
 ```
 

@@ -1,0 +1,277 @@
+---
+# Подготовка инфраструктуры для Open WebUI:
+# - Namespace platform + Secret с API-ключами
+# - Cloudflare Tunnel hostname + DNS CNAME + Access Application
+#
+# Перед запуском:
+# 1. Создать файл .secrets/openai с содержимым:
+#    OPENAI_API_KEY=sk-...
+#
+# Запуск: ansible-playbook ansible/playbooks/setup-open-webui.yml
+#
+# После запуска:
+# 1. git add + commit + push → ArgoCD задеплоит Open WebUI
+# 2. Первый зарегистрированный пользователь станет админом
+# 3. Admin Panel → Settings → Connections → добавить Anthropic
+
+- name: Подготовить инфраструктуру для Open WebUI
+  hosts: k3s_master
+  become: true
+  gather_facts: false
+
+  vars:
+    domain: "webtechforge.dev"
+    subdomain: "ai"
+    fqdn: "ai.webtechforge.dev"
+    app_namespace: "platform"
+    secret_name: "open-webui-secrets"
+    secrets_file: "{{ playbook_dir }}/../../.secrets/openai"
+    cf_secrets_file: "{{ playbook_dir }}/../../.secrets/cloudflare"
+    traefik_origin: "http://traefik.traefik.svc.cluster.local:80"
+
+  tasks:
+    # === Проверка секретов ===
+
+    - name: "Проверить: .secrets/openai существует"
+      ansible.builtin.stat:
+        path: "{{ secrets_file }}"
+      delegate_to: localhost
+      become: false
+      register: openai_secrets_stat
+
+    - name: "Проверить: .secrets/openai — прервать если нет"
+      ansible.builtin.fail:
+        msg: |
+          Файл .secrets/openai не найден!
+          Создайте его: echo 'OPENAI_API_KEY=sk-...' > .secrets/openai
+      when: not openai_secrets_stat.stat.exists
+
+    - name: "Загрузить секреты OpenAI"
+      ansible.builtin.set_fact:
+        openai_api_key: "{{ lookup('file', secrets_file) | regex_search('OPENAI_API_KEY=(.+)', '\\1') | first }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: "Загрузить секреты Cloudflare"
+      ansible.builtin.set_fact:
+        cf_api_token: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_API_TOKEN=(.+)', '\\1') | first }}"
+        cf_account_id: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_ACCOUNT_ID=(.+)', '\\1') | first }}"
+        cf_zone_id: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_ZONE_ID=(.+)', '\\1') | first }}"
+        cf_tunnel_id: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_TUNNEL_ID=(.+)', '\\1') | first }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    # === Kubernetes: namespace + secret ===
+
+    - name: "K8s: Создать namespace {{ app_namespace }}"
+      ansible.builtin.shell: |
+        k3s kubectl create namespace {{ app_namespace }} --dry-run=client -o yaml | k3s kubectl apply -f -
+
+    - name: "K8s: Создать Secret {{ secret_name }}"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ app_namespace }} create secret generic {{ secret_name }} \
+          --from-literal=OPENAI_API_KEY="{{ openai_api_key }}" \
+          --dry-run=client -o yaml | k3s kubectl apply -f -
+      no_log: true
+
+    # === Cloudflare Tunnel: добавить hostname ===
+
+    - name: "CF Tunnel: Получить текущую конфигурацию"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/cfd_tunnel/{{ cf_tunnel_id }}/configurations"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      register: tunnel_config
+      no_log: true
+
+    - name: "CF Tunnel: Проверить наличие hostname {{ fqdn }}"
+      ansible.builtin.set_fact:
+        hostname_exists: "{{ tunnel_config.json.result.config.ingress | selectattr('hostname', 'defined') | selectattr('hostname', 'equalto', fqdn) | list | length > 0 }}"
+
+    - name: "CF Tunnel: Добавить hostname {{ fqdn }}"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/cfd_tunnel/{{ cf_tunnel_id }}/configurations"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          config:
+            ingress: >-
+              {{
+                (tunnel_config.json.result.config.ingress | selectattr('hostname', 'defined') | list)
+                + [{"hostname": fqdn, "service": traefik_origin, "originRequest": {}}]
+                + [{"service": "http_status:404"}]
+              }}
+        return_content: true
+        status_code: [200]
+      delegate_to: localhost
+      become: false
+      when: not hostname_exists
+      no_log: true
+
+    # === Cloudflare DNS: CNAME ===
+
+    - name: "CF DNS: Проверить CNAME {{ subdomain }}"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/zones/{{ cf_zone_id }}/dns_records?type=CNAME&name={{ fqdn }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      register: dns_check
+
+    - name: "CF DNS: Создать CNAME {{ fqdn }} → tunnel"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/zones/{{ cf_zone_id }}/dns_records"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          type: CNAME
+          name: "{{ subdomain }}"
+          content: "{{ cf_tunnel_id }}.cfargotunnel.com"
+          proxied: true
+          ttl: 1
+        return_content: true
+        status_code: [200]
+      delegate_to: localhost
+      become: false
+      when: dns_check.json.result | length == 0
+
+    # === Cloudflare Access Application ===
+
+    - name: "CF Access: Проверить существующее приложение"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      register: access_apps
+
+    - name: "CF Access: Найти приложение для {{ fqdn }}"
+      ansible.builtin.set_fact:
+        access_app_exists: "{{ access_apps.json.result | selectattr('domain', 'defined') | selectattr('domain', 'equalto', fqdn) | list | length > 0 }}"
+
+    - name: "CF Access: Получить список Identity Providers"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/identity_providers"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      register: idp_list
+      when: not access_app_exists
+
+    - name: "CF Access: Найти Google IdP"
+      ansible.builtin.set_fact:
+        google_idp_id: "{{ (idp_list.json.result | selectattr('type', 'equalto', 'google-apps') | first).id }}"
+      when: not access_app_exists
+
+    - name: "CF Access: Создать приложение Open WebUI"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          name: "Open WebUI"
+          domain: "{{ fqdn }}"
+          type: "self_hosted"
+          session_duration: "24h"
+          auto_redirect_to_identity: true
+          allowed_idps:
+            - "{{ google_idp_id }}"
+        return_content: true
+        status_code: [200, 201]
+      delegate_to: localhost
+      become: false
+      register: access_app_created
+      when: not access_app_exists
+
+    - name: "CF Access: Получить ID приложения"
+      ansible.builtin.set_fact:
+        access_app_id: "{{ access_app_created.json.result.id }}"
+      when: not access_app_exists
+
+    - name: "CF Access: Создать Allow-политику (Google OAuth)"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ access_app_id }}/policies"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          name: "Allow Google OAuth"
+          decision: "allow"
+          include:
+            - email:
+                email: "s.tsepeniuk@webtechforge.dev"
+          precedence: 1
+        return_content: true
+        status_code: [200, 201]
+      delegate_to: localhost
+      become: false
+      when: not access_app_exists
+
+    # === Итог ===
+
+    - name: "Статус: проверить namespace и secret"
+      ansible.builtin.shell: |
+        echo "=== NAMESPACE ===" && \
+        k3s kubectl get namespace {{ app_namespace }} && \
+        echo "=== SECRET ===" && \
+        k3s kubectl -n {{ app_namespace }} get secret {{ secret_name }}
+      register: final_status
+      changed_when: false
+
+    - name: Вывести статус
+      ansible.builtin.debug:
+        msg: "{{ final_status.stdout_lines }}"
+
+    - name: Инструкции
+      ansible.builtin.debug:
+        msg:
+          - "============================================"
+          - "Open WebUI: инфраструктура готова!"
+          - "============================================"
+          - ""
+          - "Следующие шаги:"
+          - "1. Закоммитить и запушить изменения в main"
+          - "   ArgoCD автоматически задеплоит Open WebUI"
+          - ""
+          - "2. Проверить деплой:"
+          - "   kubectl -n argocd get app system-apps open-webui"
+          - "   kubectl -n {{ app_namespace }} get pods"
+          - "   kubectl -n {{ app_namespace }} get pvc"
+          - ""
+          - "3. Открыть https://{{ fqdn }}"
+          - "   Первый зарегистрированный пользователь станет админом"
+          - ""
+          - "4. Добавить Anthropic (Admin Panel → Settings → Connections):"
+          - "   URL: https://api.anthropic.com/v1"
+          - "   API Key: sk-ant-..."
+          - "============================================"
