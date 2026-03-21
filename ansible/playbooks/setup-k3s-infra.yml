@@ -67,7 +67,7 @@
             ingressRoute:
               dashboard:
                 enabled: true
-                matchRule: PathPrefix(`/dashboard`) || PathPrefix(`/api`)
+                matchRule: Host(`traefik.localhost`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
                 entryPoints:
                   - web
         EOF
