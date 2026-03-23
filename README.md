@@ -52,7 +52,7 @@ IaC-репозиторий для управления Proxmox VE 8.4.17 инф�
 | Cloudflare Tunnel | cloudflare | cloudflared latest | Внешний доступ к сервисам через webtechforge.dev |
 | Open WebUI | platform | v0.8.10 (Helm 12.10.0) | AI-чат интерфейс (через LiteLLM Proxy) |
 | LiteLLM Proxy | platform | Helm 0.1.2 | Единый шлюз к LLM-провайдерам (Bedrock, OpenRouter) |
-| Langfuse | platform | Helm 1.5.22 | LLM observability (трейсинг, стоимость, латентность) |
+| Langfuse | platform | Helm 1.5.23 | LLM observability (трейсинг, стоимость, латентность) |
 
 ## Развёртывание
 
@@ -119,6 +119,10 @@ Bypass (path-based, без OAuth):
 Секреты для Cloudflare API: `.secrets/cloudflare` (API token, account/zone/tunnel ID).
 Секреты LiteLLM: `.secrets/litellm` (master key, salt, AWS credentials, OpenRouter key, Langfuse keys).
 Секреты Langfuse: `.secrets/langfuse` (NextAuth secret, salt, encryption key).
+
+**K8s-секреты Langfuse (создаются плейбуком `setup-llm-stack.yml`):**
+- `langfuse-secrets` — NEXTAUTH_SECRET, SALT, ENCRYPTION_KEY (из `.secrets/langfuse`)
+- `langfuse-db-secrets` — пароли PostgreSQL, ClickHouse, MinIO (не хранятся в git, управляются через `existingSecret` в Helm values)
 
 ## ArgoCD GitOps
 
