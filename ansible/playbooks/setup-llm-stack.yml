@@ -160,8 +160,10 @@
       ansible.builtin.shell: |
         k3s kubectl -n {{ app_namespace }} create secret generic langfuse-db-secrets \
           --from-literal=PG_PASSWORD="langfuse-pg-pass" \
+          --from-literal=postgres-password="langfuse-pg-pass" \
           --from-literal=CH_PASSWORD="langfuse-ch-pass" \
           --from-literal=MINIO_ROOT_PASSWORD="langfuse-minio-pass" \
+          --from-literal=root-user="minioadmin" \
           --dry-run=client -o yaml | k3s kubectl apply -f -
       no_log: true
 

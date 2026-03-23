@@ -58,12 +58,12 @@ spec:
             existingSecret: langfuse-db-secrets
             secretKeys:
               userPasswordKey: PG_PASSWORD
+              adminPasswordKey: PG_PASSWORD
             database: postgres_langfuse
           architecture: standalone
           primary:
             persistence:
               size: 2Gi
-              storageClass: longhorn-single
             resources:
               requests:
                 cpu: 256m
