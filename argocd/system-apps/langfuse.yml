@@ -88,6 +88,8 @@ spec:
         redis:
           deploy: true
           architecture: standalone
+          auth:
+            enabled: false
           primary:
             persistence:
               storageClass: longhorn-single
