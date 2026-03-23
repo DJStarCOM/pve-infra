@@ -30,9 +30,17 @@ spec:
           limits:
             cpu: "1"
             memory: 1Gi
+        environmentSecrets:
+          - litellm-secrets
+        envVars:
+          LANGFUSE_HOST: "http://langfuse-web.platform.svc.cluster.local:3000"
         postgresql:
           enabled: true
           architecture: standalone
+          image:
+            registry: docker.io
+            repository: bitnami/postgresql
+            tag: "16-debian-12"
           primary:
             persistence:
               size: 2Gi
@@ -43,46 +51,6 @@ spec:
               limits:
                 cpu: 500m
                 memory: 512Mi
-        envVars:
-          - name: LITELLM_SALT_KEY
-            valueFrom:
-              secretKeyRef:
-                name: litellm-secrets
-                key: LITELLM_SALT_KEY
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: litellm-secrets
-                key: AWS_ACCESS_KEY_ID
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: litellm-secrets
-                key: AWS_SECRET_ACCESS_KEY
-          - name: AWS_REGION_NAME
-            valueFrom:
-              secretKeyRef:
-                name: litellm-secrets
-                key: AWS_REGION_NAME
-          - name: OPENROUTER_API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: litellm-secrets
-                key: OPENROUTER_API_KEY
-          - name: LANGFUSE_PUBLIC_KEY
-            valueFrom:
-              secretKeyRef:
-                name: litellm-secrets
-                key: LANGFUSE_PUBLIC_KEY
-                optional: true
-          - name: LANGFUSE_SECRET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: litellm-secrets
-                key: LANGFUSE_SECRET_KEY
-                optional: true
-          - name: LANGFUSE_HOST
-            value: "http://langfuse-web.platform.svc.cluster.local:3000"
         proxy_config:
           model_list:
             - model_name: "claude-opus-4"
