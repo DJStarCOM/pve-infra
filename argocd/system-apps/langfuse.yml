@@ -72,9 +72,14 @@ spec:
           deploy: true
           auth:
             password: "langfuse-ch-pass"
+          clusterEnabled: false
           replicaCount: 1
           shards: 1
           resourcesPreset: small
+          persistence:
+            size: 2Gi
+          zookeeper:
+            enabled: false
         redis:
           deploy: true
           architecture: standalone
