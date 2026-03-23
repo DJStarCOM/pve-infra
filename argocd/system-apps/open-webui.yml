@@ -39,8 +39,8 @@ spec:
           - name: OPENAI_API_KEY
             valueFrom:
               secretKeyRef:
-                name: litellm-secrets
-                key: LITELLM_MASTER_KEY
+                name: litellm-masterkey
+                key: masterkey
   destination:
     server: https://kubernetes.default.svc
     namespace: platform
