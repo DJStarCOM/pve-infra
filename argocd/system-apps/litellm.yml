@@ -53,15 +53,24 @@ spec:
                 memory: 512Mi
         proxy_config:
           model_list:
-            - model_name: "claude-opus-4"
+            - model_name: "claude-opus-4.6"
               litellm_params:
-                model: "bedrock/anthropic.claude-opus-4-20250514"
+                model: "bedrock/anthropic.claude-opus-4-6-v1"
+            - model_name: "claude-opus-4.5"
+              litellm_params:
+                model: "bedrock/anthropic.claude-opus-4-5-20251101-v1:0"
+            - model_name: "claude-sonnet-4.6"
+              litellm_params:
+                model: "bedrock/anthropic.claude-sonnet-4-6"
+            - model_name: "claude-sonnet-4.5"
+              litellm_params:
+                model: "bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0"
             - model_name: "claude-sonnet-4"
               litellm_params:
-                model: "bedrock/anthropic.claude-sonnet-4-20250514"
+                model: "bedrock/anthropic.claude-sonnet-4-20250514-v1:0"
             - model_name: "claude-haiku-4.5"
               litellm_params:
-                model: "bedrock/anthropic.claude-haiku-4-5-20251001"
+                model: "bedrock/anthropic.claude-haiku-4-5-20251001-v1:0"
             - model_name: "nova-pro"
               litellm_params:
                 model: "bedrock/amazon.nova-pro-v1:0"
