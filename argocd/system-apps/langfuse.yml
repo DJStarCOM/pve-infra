@@ -10,7 +10,7 @@ spec:
   source:
     chart: langfuse
     repoURL: https://langfuse.github.io/langfuse-k8s
-    targetRevision: "1.5.22"
+    targetRevision: "1.5.23"
     helm:
       valuesObject:
         langfuse:
@@ -55,12 +55,15 @@ spec:
         postgresql:
           deploy: true
           auth:
-            password: "langfuse-pg-pass"
+            existingSecret: langfuse-db-secrets
+            secretKeys:
+              userPasswordKey: PG_PASSWORD
             database: postgres_langfuse
           architecture: standalone
           primary:
             persistence:
               size: 2Gi
+              storageClass: longhorn-single
             resources:
               requests:
                 cpu: 256m
@@ -71,7 +74,8 @@ spec:
         clickhouse:
           deploy: true
           auth:
-            password: "langfuse-ch-pass"
+            existingSecret: langfuse-db-secrets
+            existingSecretKey: CH_PASSWORD
           clusterEnabled: false
           replicaCount: 1
           shards: 1
@@ -99,7 +103,8 @@ spec:
           persistence:
             storageClass: longhorn-single
           auth:
-            rootPassword: "langfuse-minio-pass"
+            existingSecret: langfuse-db-secrets
+            rootPasswordSecretKey: MINIO_ROOT_PASSWORD
   destination:
     server: https://kubernetes.default.svc
     namespace: platform
@@ -108,6 +113,11 @@ spec:
       kind: Ingress
       jsonPointers:
         - /status
+    - group: ""
+      kind: Secret
+      name: langfuse-db-secrets
+      jsonPointers:
+        - /data
   syncPolicy:
     automated:
       selfHeal: true

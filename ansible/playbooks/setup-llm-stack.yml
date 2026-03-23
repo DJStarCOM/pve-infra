@@ -156,6 +156,15 @@
           --dry-run=client -o yaml | k3s kubectl apply -f -
       no_log: true
 
+    - name: "K8s: Создать Secret langfuse-db-secrets (пароли БД)"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ app_namespace }} create secret generic langfuse-db-secrets \
+          --from-literal=PG_PASSWORD="langfuse-pg-pass" \
+          --from-literal=CH_PASSWORD="langfuse-ch-pass" \
+          --from-literal=MINIO_ROOT_PASSWORD="langfuse-minio-pass" \
+          --dry-run=client -o yaml | k3s kubectl apply -f -
+      no_log: true
+
     # === Cloudflare Tunnel: добавить hostnames ===
 
     - name: "CF Tunnel: Получить текущую конфигурацию"
@@ -232,7 +241,7 @@
         echo "=== NAMESPACE ===" && \
         k3s kubectl get namespace {{ app_namespace }} && \
         echo "=== SECRETS ===" && \
-        k3s kubectl -n {{ app_namespace }} get secret litellm-secrets langfuse-secrets
+        k3s kubectl -n {{ app_namespace }} get secret litellm-secrets langfuse-secrets langfuse-db-secrets
       register: final_status
       changed_when: false
 
