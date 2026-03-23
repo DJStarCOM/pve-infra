@@ -100,6 +100,11 @@ spec:
       kind: Ingress
       jsonPointers:
         - /status
+    - group: ""
+      kind: Secret
+      name: litellm-masterkey
+      jsonPointers:
+        - /data/masterkey
   syncPolicy:
     automated:
       selfHeal: true
