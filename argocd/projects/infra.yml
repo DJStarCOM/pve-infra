@@ -8,7 +8,7 @@ spec:
   sourceRepos:
     - "git@github.com:DJStarCOM/pve-infra.git"
     - "https://helm.openwebui.com/"
-    - "docker.litellm.ai/berriai/litellm-helm"
+    - "docker.litellm.ai/berriai"
     - "https://langfuse.github.io/langfuse-k8s"
   destinations:
     - namespace: "*"

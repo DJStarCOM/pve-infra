@@ -53,7 +53,10 @@ spec:
                 - path: /
                   pathType: Prefix
         postgresql:
-          enabled: true
+          deploy: true
+          auth:
+            password: "langfuse-pg-pass"
+            database: postgres_langfuse
           architecture: standalone
           primary:
             persistence:
@@ -66,36 +69,27 @@ spec:
                 cpu: "1"
                 memory: 1Gi
         clickhouse:
-          enabled: true
-          persistence:
-            size: 5Gi
-          resources:
-            requests:
-              cpu: 512m
-              memory: 1Gi
-            limits:
-              cpu: "2"
-              memory: 2Gi
+          deploy: true
+          auth:
+            password: "langfuse-ch-pass"
+          replicaCount: 1
+          shards: 1
+          resourcesPreset: small
         redis:
-          enabled: true
-          resources:
-            requests:
-              cpu: 128m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-        minio:
-          enabled: true
-          persistence:
-            size: 2Gi
-          resources:
-            requests:
-              cpu: 128m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+          deploy: true
+          architecture: standalone
+          primary:
+            resources:
+              requests:
+                cpu: 128m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+        s3:
+          deploy: true
+          auth:
+            rootPassword: "langfuse-minio-pass"
   destination:
     server: https://kubernetes.default.svc
     namespace: platform
