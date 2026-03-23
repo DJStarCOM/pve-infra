@@ -38,10 +38,10 @@ spec:
           - name: OPENAI_API_KEY
             valueFrom:
               secretKeyRef:
-                name: open-webui-secrets
-                key: OPENAI_API_KEY
+                name: litellm-secrets
+                key: LITELLM_MASTER_KEY
           - name: OPENAI_API_BASE_URL
-            value: "https://llm.justysoft.com:443/v1"
+            value: "http://litellm.platform.svc.cluster.local:4000/v1"
   destination:
     server: https://kubernetes.default.svc
     namespace: platform

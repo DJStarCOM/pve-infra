@@ -50,7 +50,9 @@ IaC-репозиторий для управления Proxmox VE 8.4.17 инф�
 | cert-manager | cert-manager | v1.17.2 | TLS-сертификаты (Let's Encrypt) |
 | kube-prometheus-stack | monitoring | Helm chart 69.8.0 | Мониторинг (Prometheus + Grafana + Alertmanager) |
 | Cloudflare Tunnel | cloudflare | cloudflared latest | Внешний доступ к сервисам через webtechforge.dev |
-| Open WebUI | platform | v0.8.10 (Helm 12.10.0) | AI-чат интерфейс (OpenAI, Anthropic) |
+| Open WebUI | platform | v0.8.10 (Helm 12.10.0) | AI-чат интерфейс (через LiteLLM Proxy) |
+| LiteLLM Proxy | platform | Helm 0.1.2 | Единый шлюз к LLM-провайдерам (Bedrock, OpenRouter) |
+| Langfuse | platform | Helm 1.5.22 | LLM observability (трейсинг, стоимость, латентность) |
 
 ## Развёртывание
 
@@ -82,6 +84,11 @@ ansible-playbook ansible/playbooks/setup-argocd.yml
 # Сначала: echo 'OPENAI_API_KEY=sk-...' > .secrets/openai
 ansible-playbook ansible/playbooks/setup-open-webui.yml
 # После: git push → ArgoCD задеплоит, первый пользователь = админ
+
+# Фаза 9: LiteLLM Proxy + Langfuse (LLM-шлюз + observability)
+# Сначала: создать .secrets/litellm и .secrets/langfuse (см. плейбук)
+ansible-playbook ansible/playbooks/setup-llm-stack.yml
+# После: git push → ArgoCD задеплоит, Langfuse UI → API keys → обновить litellm-secrets
 ```
 
 ## Внешний доступ (через Cloudflare Tunnel)
@@ -93,6 +100,8 @@ ansible-playbook ansible/playbooks/setup-open-webui.yml
 | ArgoCD | `https://argo.webtechforge.dev` |
 | Longhorn UI | `https://lh.webtechforge.dev` |
 | Open WebUI | `https://ai.webtechforge.dev` |
+| LiteLLM Proxy | `https://llm.webtechforge.dev` |
+| Langfuse | `https://lf.webtechforge.dev` |
 
 Все сервисы защищены Cloudflare Access (Google OAuth, `s.tsepeniuk@webtechforge.dev`).
 
@@ -108,6 +117,8 @@ Bypass (path-based, без OAuth):
 4. Создать Access Application с allow policy
 
 Секреты для Cloudflare API: `.secrets/cloudflare` (API token, account/zone/tunnel ID).
+Секреты LiteLLM: `.secrets/litellm` (master key, salt, AWS credentials, OpenRouter key, Langfuse keys).
+Секреты Langfuse: `.secrets/langfuse` (NextAuth secret, salt, encryption key).
 
 ## ArgoCD GitOps
 

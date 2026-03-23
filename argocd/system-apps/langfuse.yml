@@ -1,0 +1,111 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: langfuse
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: infra
+  source:
+    chart: langfuse
+    repoURL: https://langfuse.github.io/langfuse-k8s
+    targetRevision: "1.5.22"
+    helm:
+      valuesObject:
+        langfuse:
+          nextauth:
+            url: "https://lf.webtechforge.dev"
+            secretRef:
+              name: langfuse-secrets
+              key: NEXTAUTH_SECRET
+          salt:
+            secretRef:
+              name: langfuse-secrets
+              key: SALT
+          encryptionKey:
+            secretRef:
+              name: langfuse-secrets
+              key: ENCRYPTION_KEY
+          web:
+            resources:
+              requests:
+                cpu: 512m
+                memory: 1Gi
+              limits:
+                cpu: "2"
+                memory: 2Gi
+          worker:
+            resources:
+              requests:
+                cpu: 256m
+                memory: 512Mi
+              limits:
+                cpu: "1"
+                memory: 1Gi
+        ingress:
+          enabled: true
+          className: traefik
+          hosts:
+            - host: lf.webtechforge.dev
+              paths:
+                - path: /
+                  pathType: Prefix
+        postgresql:
+          enabled: true
+          architecture: standalone
+          primary:
+            persistence:
+              size: 2Gi
+            resources:
+              requests:
+                cpu: 256m
+                memory: 512Mi
+              limits:
+                cpu: "1"
+                memory: 1Gi
+        clickhouse:
+          enabled: true
+          persistence:
+            size: 5Gi
+          resources:
+            requests:
+              cpu: 512m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+        redis:
+          enabled: true
+          resources:
+            requests:
+              cpu: 128m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+        minio:
+          enabled: true
+          persistence:
+            size: 2Gi
+          resources:
+            requests:
+              cpu: 128m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform
+  ignoreDifferences:
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /status
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true

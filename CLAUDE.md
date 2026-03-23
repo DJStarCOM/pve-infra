@@ -47,11 +47,16 @@ ansible-playbook ansible/playbooks/setup-argocd.yml
 
 # Фаза 8: Open WebUI (сначала создать .secrets/openai!)
 ansible-playbook ansible/playbooks/setup-open-webui.yml
+
+# Фаза 9: LiteLLM Proxy + Langfuse (сначала создать .secrets/litellm и .secrets/langfuse!)
+ansible-playbook ansible/playbooks/setup-llm-stack.yml
 ```
 
 ## Cloudflare
 
 Секреты для CF API: `.secrets/cloudflare` (CLOUDFLARE_API_TOKEN, ACCOUNT_ID, ZONE_ID, TUNNEL_ID).
+Секреты LiteLLM: `.secrets/litellm` (LITELLM_MASTER_KEY, LITELLM_SALT_KEY, AWS_*, OPENROUTER_API_KEY, LANGFUSE_*).
+Секреты Langfuse: `.secrets/langfuse` (NEXTAUTH_SECRET, SALT, ENCRYPTION_KEY).
 Tunnel name: `k3s-pve`. Все сервисы через Cloudflare Access (Google OAuth).
 
 ## ArgoCD GitOps

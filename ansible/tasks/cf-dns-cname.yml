@@ -1,0 +1,32 @@
+---
+- name: "CF DNS: Проверить CNAME {{ svc.subdomain }}"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/zones/{{ cf_zone_id }}/dns_records?type=CNAME&name={{ svc.fqdn }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: "application/json"
+    return_content: true
+  delegate_to: localhost
+  become: false
+  register: dns_check
+
+- name: "CF DNS: Создать CNAME {{ svc.fqdn }} → tunnel"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/zones/{{ cf_zone_id }}/dns_records"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      type: CNAME
+      name: "{{ svc.subdomain }}"
+      content: "{{ cf_tunnel_id }}.cfargotunnel.com"
+      proxied: true
+      ttl: 1
+    return_content: true
+    status_code: [200]
+  delegate_to: localhost
+  become: false
+  when: dns_check.json.result | length == 0

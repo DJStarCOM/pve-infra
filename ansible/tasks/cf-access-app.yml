@@ -1,0 +1,42 @@
+---
+- name: "CF Access: Создать приложение {{ svc.app_name }}"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "{{ svc.app_name }}"
+      domain: "{{ svc.fqdn }}"
+      type: "self_hosted"
+      session_duration: "24h"
+      auto_redirect_to_identity: true
+      allowed_idps:
+        - "{{ google_idp_id }}"
+    return_content: true
+    status_code: [200, 201]
+  delegate_to: localhost
+  become: false
+  register: access_app_created
+
+- name: "CF Access: Создать Allow-политику для {{ svc.app_name }}"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ access_app_created.json.result.id }}/policies"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "Allow Google OAuth"
+      decision: "allow"
+      include:
+        - email:
+            email: "s.tsepeniuk@webtechforge.dev"
+      precedence: 1
+    return_content: true
+    status_code: [200, 201]
+  delegate_to: localhost
+  become: false

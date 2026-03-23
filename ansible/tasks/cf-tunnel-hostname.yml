@@ -1,0 +1,41 @@
+---
+- name: "CF Tunnel: Проверить наличие hostname {{ svc.fqdn }}"
+  ansible.builtin.set_fact:
+    hostname_exists: "{{ tunnel_config.json.result.config.ingress | selectattr('hostname', 'defined') | selectattr('hostname', 'equalto', svc.fqdn) | list | length > 0 }}"
+
+- name: "CF Tunnel: Получить актуальную конфигурацию для {{ svc.fqdn }}"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/cfd_tunnel/{{ cf_tunnel_id }}/configurations"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: "application/json"
+    return_content: true
+  delegate_to: localhost
+  become: false
+  register: tunnel_config
+  no_log: true
+  when: not hostname_exists
+
+- name: "CF Tunnel: Добавить hostname {{ svc.fqdn }}"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/cfd_tunnel/{{ cf_tunnel_id }}/configurations"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      config:
+        ingress: >-
+          {{
+            (tunnel_config.json.result.config.ingress | selectattr('hostname', 'defined') | list)
+            + [{"hostname": svc.fqdn, "service": traefik_origin, "originRequest": {}}]
+            + [{"service": "http_status:404"}]
+          }}
+    return_content: true
+    status_code: [200]
+  delegate_to: localhost
+  become: false
+  when: not hostname_exists
+  no_log: true

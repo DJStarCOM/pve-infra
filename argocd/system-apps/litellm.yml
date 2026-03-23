@@ -1,0 +1,126 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litellm
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: infra
+  source:
+    chart: litellm-helm
+    repoURL: oci://docker.litellm.ai/berriai/litellm-helm
+    targetRevision: "0.1.2"
+    helm:
+      valuesObject:
+        masterkeySecretName: litellm-secrets
+        masterkeySecretKey: LITELLM_MASTER_KEY
+        ingress:
+          enabled: true
+          className: traefik
+          hosts:
+            - host: llm.webtechforge.dev
+              paths:
+                - path: /
+                  pathType: Prefix
+        resources:
+          requests:
+            cpu: 256m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        postgresql:
+          enabled: true
+          architecture: standalone
+          primary:
+            persistence:
+              size: 2Gi
+            resources:
+              requests:
+                cpu: 128m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+        envVars:
+          - name: LITELLM_SALT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-secrets
+                key: LITELLM_SALT_KEY
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: litellm-secrets
+                key: AWS_ACCESS_KEY_ID
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-secrets
+                key: AWS_SECRET_ACCESS_KEY
+          - name: AWS_REGION_NAME
+            valueFrom:
+              secretKeyRef:
+                name: litellm-secrets
+                key: AWS_REGION_NAME
+          - name: OPENROUTER_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-secrets
+                key: OPENROUTER_API_KEY
+          - name: LANGFUSE_PUBLIC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-secrets
+                key: LANGFUSE_PUBLIC_KEY
+                optional: true
+          - name: LANGFUSE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: litellm-secrets
+                key: LANGFUSE_SECRET_KEY
+                optional: true
+          - name: LANGFUSE_HOST
+            value: "http://langfuse-web.platform.svc.cluster.local:3000"
+        proxy_config:
+          model_list:
+            - model_name: "claude-opus-4"
+              litellm_params:
+                model: "bedrock/anthropic.claude-opus-4-20250514"
+            - model_name: "claude-sonnet-4"
+              litellm_params:
+                model: "bedrock/anthropic.claude-sonnet-4-20250514"
+            - model_name: "claude-haiku-4.5"
+              litellm_params:
+                model: "bedrock/anthropic.claude-haiku-4-5-20251001"
+            - model_name: "nova-pro"
+              litellm_params:
+                model: "bedrock/amazon.nova-pro-v1:0"
+            - model_name: "nova-lite"
+              litellm_params:
+                model: "bedrock/amazon.nova-lite-v1:0"
+            - model_name: "nova-micro"
+              litellm_params:
+                model: "bedrock/amazon.nova-micro-v1:0"
+            - model_name: "openrouter/*"
+              litellm_params:
+                model: "openrouter/*"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+          litellm_settings:
+            success_callback:
+              - "langfuse"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform
+  ignoreDifferences:
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /status
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true

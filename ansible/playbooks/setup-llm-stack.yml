@@ -1,0 +1,273 @@
+---
+# Подготовка инфраструктуры для LiteLLM Proxy + Langfuse:
+# - K8s Secrets для LiteLLM и Langfuse
+# - Cloudflare Tunnel hostnames + DNS CNAME + Access Applications
+#
+# Перед запуском:
+# 1. Создать файл .secrets/litellm:
+#    LITELLM_MASTER_KEY=sk-litellm-<random>
+#    LITELLM_SALT_KEY=<openssl rand -hex 32>
+#    AWS_ACCESS_KEY_ID=<key>
+#    AWS_SECRET_ACCESS_KEY=<secret>
+#    AWS_REGION_NAME=eu-central-1
+#    OPENROUTER_API_KEY=sk-or-...
+#
+# 2. Создать файл .secrets/langfuse:
+#    NEXTAUTH_SECRET=<openssl rand -hex 32>
+#    SALT=<openssl rand -hex 32>
+#    ENCRYPTION_KEY=<openssl rand -hex 32>
+#
+# Запуск: ansible-playbook ansible/playbooks/setup-llm-stack.yml
+#
+# После запуска:
+# 1. git add + commit + push → ArgoCD задеплоит LiteLLM и Langfuse
+# 2. Зайти в Langfuse UI (https://lf.webtechforge.dev) → создать аккаунт → project → API keys
+# 3. Добавить LANGFUSE_PUBLIC_KEY и LANGFUSE_SECRET_KEY в .secrets/litellm
+# 4. Повторно запустить этот плейбук → перезапустить LiteLLM pod
+
+- name: Подготовить инфраструктуру для LiteLLM + Langfuse
+  hosts: k3s_master
+  become: true
+  gather_facts: false
+
+  vars:
+    domain: "webtechforge.dev"
+    app_namespace: "platform"
+    litellm_secrets_file: "{{ playbook_dir }}/../../.secrets/litellm"
+    langfuse_secrets_file: "{{ playbook_dir }}/../../.secrets/langfuse"
+    cf_secrets_file: "{{ playbook_dir }}/../../.secrets/cloudflare"
+    traefik_origin: "http://traefik.traefik.svc.cluster.local:80"
+
+    services:
+      - subdomain: "llm"
+        fqdn: "llm.webtechforge.dev"
+        app_name: "LiteLLM Proxy"
+      - subdomain: "lf"
+        fqdn: "lf.webtechforge.dev"
+        app_name: "Langfuse"
+
+  tasks:
+    # === Проверка секретов ===
+
+    - name: "Проверить: .secrets/litellm существует"
+      ansible.builtin.stat:
+        path: "{{ litellm_secrets_file }}"
+      delegate_to: localhost
+      become: false
+      register: litellm_secrets_stat
+
+    - name: "Проверить: .secrets/litellm — прервать если нет"
+      ansible.builtin.fail:
+        msg: |
+          Файл .secrets/litellm не найден!
+          Создайте его с ключами:
+            LITELLM_MASTER_KEY=sk-litellm-...
+            LITELLM_SALT_KEY=...
+            AWS_ACCESS_KEY_ID=...
+            AWS_SECRET_ACCESS_KEY=...
+            AWS_REGION_NAME=eu-central-1
+            OPENROUTER_API_KEY=sk-or-...
+      when: not litellm_secrets_stat.stat.exists
+
+    - name: "Проверить: .secrets/langfuse существует"
+      ansible.builtin.stat:
+        path: "{{ langfuse_secrets_file }}"
+      delegate_to: localhost
+      become: false
+      register: langfuse_secrets_stat
+
+    - name: "Проверить: .secrets/langfuse — прервать если нет"
+      ansible.builtin.fail:
+        msg: |
+          Файл .secrets/langfuse не найден!
+          Создайте его с ключами:
+            NEXTAUTH_SECRET=<openssl rand -hex 32>
+            SALT=<openssl rand -hex 32>
+            ENCRYPTION_KEY=<openssl rand -hex 32>
+      when: not langfuse_secrets_stat.stat.exists
+
+    # === Загрузка секретов ===
+
+    - name: "Загрузить секреты LiteLLM"
+      ansible.builtin.set_fact:
+        litellm_master_key: "{{ lookup('file', litellm_secrets_file) | regex_search('LITELLM_MASTER_KEY=(.+)', '\\1') | first }}"
+        litellm_salt_key: "{{ lookup('file', litellm_secrets_file) | regex_search('LITELLM_SALT_KEY=(.+)', '\\1') | first }}"
+        aws_access_key_id: "{{ lookup('file', litellm_secrets_file) | regex_search('AWS_ACCESS_KEY_ID=(.+)', '\\1') | first }}"
+        aws_secret_access_key: "{{ lookup('file', litellm_secrets_file) | regex_search('AWS_SECRET_ACCESS_KEY=(.+)', '\\1') | first }}"
+        aws_region_name: "{{ lookup('file', litellm_secrets_file) | regex_search('AWS_REGION_NAME=(.+)', '\\1') | first }}"
+        openrouter_api_key: "{{ lookup('file', litellm_secrets_file) | regex_search('OPENROUTER_API_KEY=(.+)', '\\1') | first }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: "Загрузить секреты LiteLLM (Langfuse ключи, опционально)"
+      ansible.builtin.set_fact:
+        langfuse_public_key: "{{ lookup('file', litellm_secrets_file) | regex_search('LANGFUSE_PUBLIC_KEY=(.+)', '\\1') | default([''], true) | first }}"
+        langfuse_secret_key: "{{ lookup('file', litellm_secrets_file) | regex_search('LANGFUSE_SECRET_KEY=(.+)', '\\1') | default([''], true) | first }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: "Загрузить секреты Langfuse"
+      ansible.builtin.set_fact:
+        langfuse_nextauth_secret: "{{ lookup('file', langfuse_secrets_file) | regex_search('NEXTAUTH_SECRET=(.+)', '\\1') | first }}"
+        langfuse_salt: "{{ lookup('file', langfuse_secrets_file) | regex_search('SALT=(.+)', '\\1') | first }}"
+        langfuse_encryption_key: "{{ lookup('file', langfuse_secrets_file) | regex_search('ENCRYPTION_KEY=(.+)', '\\1') | first }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: "Загрузить секреты Cloudflare"
+      ansible.builtin.set_fact:
+        cf_api_token: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_API_TOKEN=(.+)', '\\1') | first }}"
+        cf_account_id: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_ACCOUNT_ID=(.+)', '\\1') | first }}"
+        cf_zone_id: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_ZONE_ID=(.+)', '\\1') | first }}"
+        cf_tunnel_id: "{{ lookup('file', cf_secrets_file) | regex_search('CLOUDFLARE_TUNNEL_ID=(.+)', '\\1') | first }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    # === Kubernetes: namespace + secrets ===
+
+    - name: "K8s: Создать namespace {{ app_namespace }}"
+      ansible.builtin.shell: |
+        k3s kubectl create namespace {{ app_namespace }} --dry-run=client -o yaml | k3s kubectl apply -f -
+
+    - name: "K8s: Создать Secret litellm-secrets"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ app_namespace }} create secret generic litellm-secrets \
+          --from-literal=LITELLM_MASTER_KEY="{{ litellm_master_key }}" \
+          --from-literal=LITELLM_SALT_KEY="{{ litellm_salt_key }}" \
+          --from-literal=AWS_ACCESS_KEY_ID="{{ aws_access_key_id }}" \
+          --from-literal=AWS_SECRET_ACCESS_KEY="{{ aws_secret_access_key }}" \
+          --from-literal=AWS_REGION_NAME="{{ aws_region_name }}" \
+          --from-literal=OPENROUTER_API_KEY="{{ openrouter_api_key }}" \
+          --from-literal=LANGFUSE_PUBLIC_KEY="{{ langfuse_public_key }}" \
+          --from-literal=LANGFUSE_SECRET_KEY="{{ langfuse_secret_key }}" \
+          --dry-run=client -o yaml | k3s kubectl apply -f -
+      no_log: true
+
+    - name: "K8s: Создать Secret langfuse-secrets"
+      ansible.builtin.shell: |
+        k3s kubectl -n {{ app_namespace }} create secret generic langfuse-secrets \
+          --from-literal=NEXTAUTH_SECRET="{{ langfuse_nextauth_secret }}" \
+          --from-literal=SALT="{{ langfuse_salt }}" \
+          --from-literal=ENCRYPTION_KEY="{{ langfuse_encryption_key }}" \
+          --dry-run=client -o yaml | k3s kubectl apply -f -
+      no_log: true
+
+    # === Cloudflare Tunnel: добавить hostnames ===
+
+    - name: "CF Tunnel: Получить текущую конфигурацию"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/cfd_tunnel/{{ cf_tunnel_id }}/configurations"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      register: tunnel_config
+      no_log: true
+
+    - name: "CF Tunnel: Добавить hostnames для сервисов"
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../tasks/cf-tunnel-hostname.yml"
+      loop: "{{ services }}"
+      loop_control:
+        loop_var: svc
+
+    # === Cloudflare DNS: CNAME для каждого сервиса ===
+
+    - name: "CF DNS: Проверить и создать CNAME записи"
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../tasks/cf-dns-cname.yml"
+      loop: "{{ services }}"
+      loop_control:
+        loop_var: svc
+
+    # === Cloudflare Access: приложения для каждого сервиса ===
+
+    - name: "CF Access: Получить список приложений"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      register: access_apps
+
+    - name: "CF Access: Получить список Identity Providers"
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/identity_providers"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cf_api_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      delegate_to: localhost
+      become: false
+      register: idp_list
+
+    - name: "CF Access: Найти Google IdP"
+      ansible.builtin.set_fact:
+        google_idp_id: "{{ (idp_list.json.result | selectattr('type', 'equalto', 'google-apps') | first).id }}"
+
+    - name: "CF Access: Создать приложения для сервисов"
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../tasks/cf-access-app.yml"
+      loop: "{{ services }}"
+      loop_control:
+        loop_var: svc
+      when: access_apps.json.result | selectattr('domain', 'defined') | selectattr('domain', 'equalto', svc.fqdn) | list | length == 0
+
+    # === Итог ===
+
+    - name: "Статус: проверить namespace и secrets"
+      ansible.builtin.shell: |
+        echo "=== NAMESPACE ===" && \
+        k3s kubectl get namespace {{ app_namespace }} && \
+        echo "=== SECRETS ===" && \
+        k3s kubectl -n {{ app_namespace }} get secret litellm-secrets langfuse-secrets
+      register: final_status
+      changed_when: false
+
+    - name: Вывести статус
+      ansible.builtin.debug:
+        msg: "{{ final_status.stdout_lines }}"
+
+    - name: Инструкции
+      ansible.builtin.debug:
+        msg:
+          - "============================================"
+          - "LiteLLM + Langfuse: инфраструктура готова!"
+          - "============================================"
+          - ""
+          - "Следующие шаги:"
+          - "1. Закоммитить и запушить изменения в main"
+          - "   ArgoCD автоматически задеплоит LiteLLM и Langfuse"
+          - ""
+          - "2. Проверить деплой:"
+          - "   kubectl -n argocd get app litellm langfuse"
+          - "   kubectl -n {{ app_namespace }} get pods"
+          - "   kubectl -n {{ app_namespace }} get pvc"
+          - ""
+          - "3. Langfuse: зайти в https://lf.webtechforge.dev"
+          - "   - Создать аккаунт (первый = админ)"
+          - "   - Создать project → Settings → API Keys"
+          - "   - Скопировать LANGFUSE_PUBLIC_KEY и LANGFUSE_SECRET_KEY"
+          - ""
+          - "4. Добавить Langfuse ключи в .secrets/litellm:"
+          - "   LANGFUSE_PUBLIC_KEY=pk-lf-..."
+          - "   LANGFUSE_SECRET_KEY=sk-lf-..."
+          - ""
+          - "5. Повторно запустить плейбук для обновления litellm-secrets"
+          - "   Затем: kubectl -n platform rollout restart deploy/litellm"
+          - ""
+          - "6. LiteLLM health: curl https://llm.webtechforge.dev/health/liveliness"
+          - "7. Open WebUI: https://ai.webtechforge.dev"
+          - "============================================"
