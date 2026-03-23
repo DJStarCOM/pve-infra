@@ -16,15 +16,16 @@ spec:
         langfuse:
           nextauth:
             url: "https://lf.webtechforge.dev"
-            secretRef:
-              name: langfuse-secrets
-              key: NEXTAUTH_SECRET
+            secret:
+              secretKeyRef:
+                name: langfuse-secrets
+                key: NEXTAUTH_SECRET
           salt:
-            secretRef:
+            secretKeyRef:
               name: langfuse-secrets
               key: SALT
           encryptionKey:
-            secretRef:
+            secretKeyRef:
               name: langfuse-secrets
               key: ENCRYPTION_KEY
           web:

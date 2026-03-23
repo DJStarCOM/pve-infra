@@ -9,7 +9,7 @@ spec:
   project: infra
   source:
     chart: litellm-helm
-    repoURL: oci://docker.litellm.ai/berriai/litellm-helm
+    repoURL: docker.litellm.ai/berriai/litellm-helm
     targetRevision: "0.1.2"
     helm:
       valuesObject:
