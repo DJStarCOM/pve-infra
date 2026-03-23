@@ -78,12 +78,15 @@ spec:
           resourcesPreset: small
           persistence:
             size: 2Gi
+            storageClass: longhorn-single
           zookeeper:
             enabled: false
         redis:
           deploy: true
           architecture: standalone
           primary:
+            persistence:
+              storageClass: longhorn-single
             resources:
               requests:
                 cpu: 128m
@@ -93,6 +96,8 @@ spec:
                 memory: 512Mi
         s3:
           deploy: true
+          persistence:
+            storageClass: longhorn-single
           auth:
             rootPassword: "langfuse-minio-pass"
   destination:
