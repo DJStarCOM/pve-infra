@@ -41,6 +41,11 @@ spec:
               secretKeyRef:
                 name: litellm-masterkey
                 key: masterkey
+          - name: WEBUI_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: open-webui-secret
+                key: WEBUI_SECRET_KEY
   destination:
     server: https://kubernetes.default.svc
     namespace: platform
@@ -49,6 +54,11 @@ spec:
       kind: Ingress
       jsonPointers:
         - /status
+    - group: ""
+      kind: Secret
+      name: open-webui-secret
+      jsonPointers:
+        - /data
   syncPolicy:
     automated:
       selfHeal: true
