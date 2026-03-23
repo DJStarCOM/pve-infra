@@ -57,90 +57,271 @@ spec:
             - model_name: "claude-opus-4.6"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-opus-4-6-v1"
+                timeout: 300
+                stream_timeout: 30
+              model_info:
+                rpm: 50
             - model_name: "claude-opus-4.5"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-opus-4-5-20251101-v1:0"
+                timeout: 300
+                stream_timeout: 30
+              model_info:
+                rpm: 50
             - model_name: "claude-sonnet-4.6"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-sonnet-4-6"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "claude-sonnet-4.5"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "claude-sonnet-4"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "claude-3.7-sonnet"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "claude-3.5-sonnet"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "claude-3-sonnet"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-3-sonnet-20240229-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "claude-haiku-4.5"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+                timeout: 60
+                stream_timeout: 10
+              model_info:
+                rpm: 200
             - model_name: "claude-3-haiku"
               litellm_params:
                 model: "bedrock/eu.anthropic.claude-3-haiku-20240307-v1:0"
+                timeout: 60
+                stream_timeout: 10
+              model_info:
+                rpm: 200
             # Bedrock EU — Amazon Nova
             - model_name: "nova-pro"
               litellm_params:
                 model: "bedrock/eu.amazon.nova-pro-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "nova-lite"
               litellm_params:
                 model: "bedrock/eu.amazon.nova-lite-v1:0"
+                timeout: 60
+                stream_timeout: 10
+              model_info:
+                rpm: 200
             - model_name: "nova-2-lite"
               litellm_params:
                 model: "bedrock/eu.amazon.nova-2-lite-v1:0"
+                timeout: 60
+                stream_timeout: 10
+              model_info:
+                rpm: 200
             - model_name: "nova-micro"
               litellm_params:
                 model: "bedrock/eu.amazon.nova-micro-v1:0"
+                timeout: 60
+                stream_timeout: 10
+              model_info:
+                rpm: 200
             # Bedrock EU — Meta Llama
             - model_name: "llama-3.2-1b"
               litellm_params:
                 model: "bedrock/eu.meta.llama3-2-1b-instruct-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "llama-3.2-3b"
               litellm_params:
                 model: "bedrock/eu.meta.llama3-2-3b-instruct-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             # Bedrock EU — Mistral
             - model_name: "pixtral-large"
               litellm_params:
                 model: "bedrock/eu.mistral.pixtral-large-2502-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             # Bedrock on-demand — прочие провайдеры
             - model_name: "minimax-m2.1"
               litellm_params:
                 model: "bedrock/minimax.minimax-m2.1"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "devstral-123b"
               litellm_params:
                 model: "bedrock/mistral.devstral-2-123b"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "gpt-oss-120b"
               litellm_params:
                 model: "bedrock/openai.gpt-oss-120b-1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "gpt-oss-20b"
               litellm_params:
                 model: "bedrock/openai.gpt-oss-20b-1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "qwen3-235b"
               litellm_params:
                 model: "bedrock/qwen.qwen3-235b-a22b-2507-v1:0"
+                timeout: 180
+                stream_timeout: 20
+              model_info:
+                rpm: 50
             - model_name: "qwen3-32b"
               litellm_params:
                 model: "bedrock/qwen.qwen3-32b-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "qwen3-coder-30b"
               litellm_params:
                 model: "bedrock/qwen.qwen3-coder-30b-a3b-v1:0"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             - model_name: "glm-4.7-flash"
               litellm_params:
                 model: "bedrock/zai.glm-4.7-flash"
+                timeout: 120
+                stream_timeout: 15
+              model_info:
+                rpm: 100
             # OpenRouter (все остальные модели)
             - model_name: "openrouter/*"
               litellm_params:
                 model: "openrouter/*"
                 api_key: "os.environ/OPENROUTER_API_KEY"
+            # OpenRouter fallback-модели (для fallback chains)
+            - model_name: "openrouter/anthropic/claude-opus-4-6"
+              litellm_params:
+                model: "openrouter/anthropic/claude-opus-4-6"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+                timeout: 300
+                stream_timeout: 30
+            - model_name: "openrouter/anthropic/claude-opus-4.5"
+              litellm_params:
+                model: "openrouter/anthropic/claude-opus-4.5"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+                timeout: 300
+                stream_timeout: 30
+            - model_name: "openrouter/anthropic/claude-sonnet-4-6"
+              litellm_params:
+                model: "openrouter/anthropic/claude-sonnet-4-6"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+                timeout: 120
+                stream_timeout: 15
+            - model_name: "openrouter/anthropic/claude-sonnet-4.5"
+              litellm_params:
+                model: "openrouter/anthropic/claude-sonnet-4.5"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+                timeout: 120
+                stream_timeout: 15
+            - model_name: "openrouter/anthropic/claude-sonnet-4"
+              litellm_params:
+                model: "openrouter/anthropic/claude-sonnet-4"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+                timeout: 120
+                stream_timeout: 15
+            - model_name: "openrouter/anthropic/claude-haiku-4.5"
+              litellm_params:
+                model: "openrouter/anthropic/claude-haiku-4.5"
+                api_key: "os.environ/OPENROUTER_API_KEY"
+                timeout: 60
+                stream_timeout: 10
+          router_settings:
+            routing_strategy: "simple-shuffle"
+            num_retries: 3
+            timeout: 120
+            retry_after: 5
+            allowed_fails: 3
+            cooldown_time: 30
+            enable_pre_call_checks: true
+            fallbacks:
+              - claude-opus-4.6: ["claude-opus-4.5", "openrouter/anthropic/claude-opus-4-6"]
+              - claude-opus-4.5: ["openrouter/anthropic/claude-opus-4.5"]
+              - claude-sonnet-4.6: ["claude-sonnet-4.5", "openrouter/anthropic/claude-sonnet-4-6"]
+              - claude-sonnet-4.5: ["claude-sonnet-4", "openrouter/anthropic/claude-sonnet-4.5"]
+              - claude-sonnet-4: ["openrouter/anthropic/claude-sonnet-4"]
+              - claude-haiku-4.5: ["claude-3-haiku", "openrouter/anthropic/claude-haiku-4.5"]
+              - nova-pro: ["nova-lite"]
+              - nova-lite: ["nova-micro"]
+            context_window_fallbacks:
+              - claude-3-haiku: ["claude-haiku-4.5"]
+              - claude-3-sonnet: ["claude-sonnet-4"]
+              - nova-micro: ["nova-lite"]
+            model_group_alias:
+              "opus": "claude-opus-4.6"
+              "sonnet": "claude-sonnet-4.6"
+              "haiku": "claude-haiku-4.5"
+              "claude": "claude-sonnet-4.6"
+              "nova": "nova-pro"
+              "cheap": "nova-micro"
+              "code": "qwen3-coder-30b"
+              "fast": "claude-haiku-4.5"
+            retry_policy:
+              ContentPolicyViolationErrorRetries: 0
+              AuthenticationErrorRetries: 0
+              BadRequestErrorRetries: 1
+              RateLimitErrorRetries: 3
+              TimeoutErrorRetries: 2
           litellm_settings:
             success_callback:
               - "langfuse"
+            max_budget: 200
+            budget_duration: "30d"
+            default_fallbacks: ["openrouter/*"]
+            cache: true
+            cache_params:
+              type: "local"
+              ttl: 300
+            drop_params: true
   destination:
     server: https://kubernetes.default.svc
     namespace: platform
